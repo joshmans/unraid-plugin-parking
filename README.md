@@ -22,7 +22,7 @@ Each row gets a **Park** button next to Remove, and a "parked" tag once it is pa
 
 ### Boot Packages tab
 The packages in `/boot/extra` are what Unraid installs at every boot, and where **un-get** keeps what it installs. This tab lists them with their size, boot cost and description, and works out what needs what from shared libraries and script interpreters (so parking `python3` warns that `meson` needs it), plus plugins and user scripts that seem to use a package.
-- **Park** moves the file to `/boot/extra-parked`: still on the flash drive, not installed at boot.
+- **Park** moves the file to `/boot/extra-parked`: still on the flash drive, not installed at boot. If the package needs others that also load at boot (`make` needs `guile`, which needs `gc`), you are then offered to park those too. Each one is checked first and left alone if another boot package needs it or a plugin or script seems to use it; you are told what was parked and why anything was kept.
 - **Load now** installs it from there (loading any parked packages it needs first), **Unload now** removes it from the running system, and **Load at every boot** puts the file back.
 
 ### Removing Plugin Parking

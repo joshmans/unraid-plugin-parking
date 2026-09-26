@@ -247,6 +247,40 @@ check('deps: libc (not a boot package) is ignored, no false links', ($d['deps'][
 check('deps: reverse map', in_array('meson-1.11.1-x86_64-1', $d['users']['python3-3.12.13-x86_64-1'] ?? []) && in_array('fwupd-1.9.24-x86_64-1_slackdce', $d['users']['libxmlb-0.3.26-x86_64-1_slackdce'] ?? []));
 unset($GLOBALS['pp_elf']);
 
+/* ---------- parking a package's dependencies ---------- */
+$mk('make-4.4.1-x86_64-1', ['usr/bin/make']);
+$mk('guile-3.0.10-x86_64-1', ['usr/bin/guile', 'usr/lib64/libguile-3.0.so.1.6.0']);
+$mk('gc-8.2.6-x86_64-1', ['usr/lib64/libgc.so.1.5.3']);
+$mk('other-1.0-x86_64-1', ['usr/bin/other']);
+foreach (['make', 'guile', 'other'] as $x) put("$root/usr/bin/$x", "\x7fELFfake");
+put("$root/usr/lib64/libguile-3.0.so.1.6.0", "\x7fELFfake");
+put("$root/usr/lib64/libgc.so.1.5.3", "\x7fELFfake");
+$GLOBALS['pp_elf'] = function (string $path) {
+    $b = basename($path);
+    if ($b === 'make') return ['libguile-3.0.so.1', 'libc.so.6'];
+    if ($b === 'guile') return ['libgc.so.1'];
+    if ($b === 'other') return ['libgc.so.1'];
+    $h = fopen($path, 'rb'); $m = fread($h, 4); fclose($h);
+    return $m === "\x7fELF" ? [] : null;
+};
+check('park deps: invalid name', pp_pkg_park_deps('../x.txz', $P)['ok'] === false);
+pp_pkg_park('make-4.4.1-x86_64-1.txz', $P);
+$r = pp_pkg_park_deps('make-4.4.1-x86_64-1.txz', $P);
+check('park deps: the package nothing else needs is parked', $r['ok'] && $r['parked'] === ['guile'] && is_file("{$P['xparked']}/guile-3.0.10-x86_64-1.txz") && !is_file("{$P['extra']}/guile-3.0.10-x86_64-1.txz"), json_encode($r));
+check('park deps: one another package still needs is kept, and why', count($r['kept']) === 1 && $r['kept'][0]['name'] === 'gc' && strpos($r['kept'][0]['reasons'][0], 'needed by other') === 0 && is_file("{$P['extra']}/gc-8.2.6-x86_64-1.txz"), json_encode($r));
+check('park deps: nothing unrelated is touched', is_file("{$P['extra']}/other-1.0-x86_64-1.txz") && is_file("{$P['extra']}/python3-3.12.13-x86_64-1.txz"));
+$r2 = pp_pkg_park_deps('make-4.4.1-x86_64-1.txz', $P);
+check('park deps: running it again finds nothing more to park', $r2['ok'] && $r2['parked'] === [], json_encode($r2));
+pp_pkg_unpark('make-4.4.1-x86_64-1.txz', $P); pp_pkg_unpark('guile-3.0.10-x86_64-1.txz', $P);
+put("{$P['plugins']}/guilefan.plg", plg('guilefan', '1', 'https://h.test/g.plg', "<FILE Run=\"/bin/bash\"><INLINE>\nguile -c 1\n</INLINE></FILE>"));
+pp_pkg_park('make-4.4.1-x86_64-1.txz', $P);
+$r3 = pp_pkg_park_deps('make-4.4.1-x86_64-1.txz', $P);
+$kn = array_column($r3['kept'], 'reasons', 'name');
+check('park deps: a package a plugin uses stays, and keeps what it needs', $r3['parked'] === [] && isset($kn['guile'], $kn['gc']) && strpos($kn['guile'][0], 'plugin guilefan') === 0 && strpos($kn['gc'][0], 'guile') !== false, json_encode($r3));
+@unlink("{$P['plugins']}/guilefan.plg");
+unset($GLOBALS['pp_elf']);
+foreach (['make-4.4.1-x86_64-1', 'guile-3.0.10-x86_64-1', 'gc-8.2.6-x86_64-1', 'other-1.0-x86_64-1'] as $b) { @unlink("{$P['varpkg']}/$b"); @unlink("{$P['extra']}/$b.txz"); @unlink("{$P['xparked']}/$b.txz"); }
+
 /* ---------- usage hints ---------- */
 put("{$P['plugins']}/ipmi.plg", plg('ipmi', '1', 'https://h.test/i.plg', "<!-- needs ipmitool-1.8.19 -->\n<FILE Run=\"/bin/bash\"><INLINE>ipmitool sdr</INLINE></FILE>"));
 put("{$P['scripts']}/fan-check/script", "#!/bin/bash\nipmitool sensor | grep Fan\n");
