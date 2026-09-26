@@ -518,22 +518,33 @@ function pp_pkg_deps(array $P): array {
     return ['deps' => $deps, 'users' => $users];
 }
 
+/** Quotes a string for grep -E: only the characters that mean something in an extended regex. */
+function pp_ere_quote(string $x): string {
+    return preg_replace('/[.\\\\+*?\\[^\\]$(){}|]/', '\\\\$0', $x);
+}
+
+/** Program names that are also ordinary words: never counted as a sign that a package is used. */
+const PP_COMMON_WORDS = ['size', 'strip', 'make', 'strings', 'test', 'file', 'install', 'date', 'time', 'sort', 'head', 'tail', 'link', 'sync', 'split', 'which', 'stat', 'less', 'more', 'look', 'true', 'false', 'yes', 'who', 'join', 'cut', 'tee', 'env', 'top', 'free', 'watch', 'expand', 'fold', 'group', 'users', 'update', 'remove', 'list', 'find', 'open', 'start', 'stop', 'main', 'run'];
+
 /**
  * Plugins and user scripts that seem to use a package: its file name is mentioned (name-1.2...), or one of its
- * programs is run as a command. A bare word like "make" in a sentence does not count.
+ * programs is run as a command in a .plg, a user script, or a plugin's own scripts. A bare word like "size" in a
+ * sentence does not count.
  */
 function pp_pkg_usage(string $base, array $P): array {
     $name = pp_pkg_parse($base . '.txz')['name'];
     $progs = [];
-    foreach (pp_pkg_info($base, $P)['files'] as $rel) if (preg_match('#^(usr/)?(local/)?s?bin/([^/]+)$#', $rel, $m) && strlen($m[3]) >= 3) $progs[$m[3]] = true;
-    $cmd = '';
+    foreach (pp_pkg_info($base, $P)['files'] as $rel) {
+        if (preg_match('#^(usr/)?(local/)?s?bin/([^/]+)$#', $rel, $m) && strlen($m[3]) >= 3 && !in_array(strtolower($m[3]), PP_COMMON_WORDS, true)) $progs[$m[3]] = true;
+    }
+    $cmd = ''; $alt = '';
     if ($progs) {
         $alt = implode('|', array_map(fn($x) => preg_quote($x, '/'), array_keys($progs)));
-        $cmd = '/(?:^|[;&|`(]|\$\()[ \t]*(?:' . $alt . ')(?![A-Za-z0-9_.-])/m';
+        $cmd = '/(?:^|[;&|`(\'"]|\$\()[ \t]*(?:' . $alt . ')(?![A-Za-z0-9_.-])/m';
     }
     $fileName = '/(?<![A-Za-z0-9_.-])' . preg_quote($name, '/') . '-[0-9]/';
     $uses = fn(string $t): bool => preg_match($fileName, $t) === 1 || ($cmd !== '' && preg_match($cmd, $t) === 1);
-    $plugins = []; $scripts = [];
+    $plugins = []; $scripts = []; $runtime = [];
     foreach (array_merge(glob($P['plugins'] . '/*.plg') ?: [], glob($P['parked'] . '/*.plg') ?: []) as $f) {
         $t = @file_get_contents($f);
         if ($t !== false && $uses($t)) $plugins[] = basename($f, '.plg');
@@ -542,7 +553,18 @@ function pp_pkg_usage(string $base, array $P): array {
         $t = @file_get_contents($sc);
         if ($t !== false && $uses($t)) $scripts[] = basename(dirname($sc));
     }
-    return ['plugins' => $plugins, 'scripts' => $scripts];
+    if ($progs && is_dir($P['emhttp'])) {
+        [$rc, $out] = pp_run('grep -rIlE -s ' . escapeshellarg('(^|[^A-Za-z0-9_.-])(' . implode('|', array_map('pp_ere_quote', array_keys($progs))) . ')([^A-Za-z0-9_.-]|$)')
+            . ' ' . escapeshellarg($P['emhttp']) . ' --include=*.php --include=*.sh --include=*.page --include=rc.* --include=started --include=stopping_svcs');
+        foreach (explode("\n", (string)$out) as $file) {
+            if (strpos($file, $P['emhttp'] . '/') !== 0 || strpos($file, '/plugin-parking/') !== false) continue;
+            $dir = explode('/', ltrim(substr($file, strlen($P['emhttp'])), '/'))[0] ?? '';
+            if ($dir === '' || in_array($dir, $runtime, true) || in_array($dir, PP_SHARED_DIRS, true)) continue;
+            $t = @file_get_contents($file);
+            if ($t !== false && preg_match($cmd, $t) === 1) $runtime[] = $dir;
+        }
+    }
+    return ['plugins' => $plugins, 'scripts' => $scripts, 'runtime' => $runtime];
 }
 
 function pp_pkg_park(string $file, array $P): array {
@@ -625,7 +647,7 @@ function pp_api(string $action, array $in, ?array $P = null): array {
         case 'load':         return pp_load($s('plg'), $s('mode'), $s('keep'), $P);
         case 'packages':     return pp_state_packages($P);
         case 'pkg_deps':     return pp_pkg_deps($P);
-        case 'pkg_usage':    return $s('base') !== '' && pp_valid_name($s('base')) ? pp_pkg_usage($s('base'), $P) : ['plugins' => [], 'scripts' => []];
+        case 'pkg_usage':    return $s('base') !== '' && pp_valid_name($s('base')) ? pp_pkg_usage($s('base'), $P) : ['plugins' => [], 'scripts' => [], 'runtime' => []];
         case 'pkg_park':     return pp_pkg_park($s('file'), $P);
         case 'pkg_unpark':   return pp_pkg_unpark($s('file'), $P);
         case 'pkg_load':     return pp_pkg_load($s('file'), $P);

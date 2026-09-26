@@ -258,6 +258,16 @@ put("{$P['plugins']}/runner.plg", plg('runner', '1', 'https://h.test/r.plg', "<F
 $us2 = pp_pkg_usage('ipmitool-1.8.19-x86_64-2_SBo', $P);
 check('usage: a word in a sentence is not a use, a command is', !in_array('chatty', $us2['plugins']) && in_array('runner', $us2['plugins']), json_encode($us2));
 @unlink("{$P['plugins']}/chatty.plg"); @unlink("{$P['plugins']}/runner.plg");
+put("{$P['emhttp']}/ipmi/scripts/sensors.php", "<?php\n\$out = shell_exec(\"ipmitool sdr\");\n");
+put("{$P['emhttp']}/prose/readme.php", "<?php // we like ipmitool-style names\n");
+put("{$P['emhttp']}/dynamix/x.php", "<?php shell_exec('ipmitool foo');\n");
+$us3 = pp_pkg_usage('ipmitool-1.8.19-x86_64-2_SBo', $P);
+check("usage: a plugin's own scripts calling the program", in_array('ipmi', $us3['runtime']), json_encode($us3));
+check('usage: prose is not a call, core folders are skipped', !in_array('prose', $us3['runtime']) && !in_array('dynamix', $us3['runtime']), json_encode($us3));
+put("{$P['varpkg']}/binutils-2.46-x86_64-1", "PACKAGE NAME:  binutils-2.46-x86_64-1\nFILE LIST:\n./\nusr/bin/\nusr/bin/size\nusr/bin/strip\nusr/bin/ld\n");
+put("{$P['emhttp']}/ipmi/scripts/words.php", "<?php\n\$size = 5;\nsize the icons\nstrip trailing\n");
+$us4 = pp_pkg_usage('binutils-2.46-x86_64-1', $P);
+check('usage: ordinary words that are also program names never count', $us4['runtime'] === [] && $us4['plugins'] === [] && $us4['scripts'] === [], json_encode($us4));
 check('usage: user script calling its program', $us['scripts'] === ['fan-check'], json_encode($us));
 
 /* ---------- uninstall choice ---------- */
