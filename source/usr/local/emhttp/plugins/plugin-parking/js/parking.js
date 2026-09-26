@@ -288,8 +288,9 @@
     const users = state.deps ? (state.deps.users[p.base] || []) : null;
     if (users && users.length) parts.push('needed by ' + users.map(nameOf).join(', '));
     const u = state.usage[p.base];
-    if (u && u.plugins.length) parts.push('mentioned by plugin ' + u.plugins.join(', '));
-    if (u && u.scripts.length) parts.push('called from user script ' + u.scripts.join(', '));
+    if (u && u.plugins.length) parts.push('may be used by plugin ' + u.plugins.join(', '));
+    if (u && u.runtime && u.runtime.length) parts.push('called by the scripts of ' + u.runtime.join(', '));
+    if (u && u.scripts.length) parts.push('may be called from user script ' + u.scripts.join(', '));
     if (!parts.length) return h('span', { class: 'pp-sub' }, state.deps && state.usage[p.base] ? 'nothing found' : 'checking…');
     return parts.map((t) => h('div', {}, t));
   }
@@ -335,7 +336,8 @@
     const users = ((state.deps && state.deps.users[p.base]) || []).filter((b) => map[b] && map[b].where === 'boot');
     if (users.length) w.push('Loaded at boot and needs it: ' + users.map(nameOf).join(', ') + '. They will not work without it.');
     const u = state.usage[p.base];
-    if (u && u.plugins.length) w.push('Plugin ' + u.plugins.join(', ') + ' mentions it.');
+    if (u && u.plugins.length) w.push('Plugin ' + u.plugins.join(', ') + ' seems to use it.');
+    if (u && u.runtime && u.runtime.length) w.push('The scripts of ' + u.runtime.join(', ') + ' call one of its programs.');
     if (u && u.scripts.length) w.push('User script ' + u.scripts.join(', ') + ' calls one of its programs.');
     if (!state.deps) w.push('Dependencies are still being worked out; you may want to wait for the “Used by” column to fill in.');
     return w;

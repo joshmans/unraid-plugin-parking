@@ -27,7 +27,7 @@ function fixture() {
       { file: 'gc-8-x86_64-1.txz', base: 'gc-8-x86_64-1', name: 'gc', version: '8', where: 'parked', diskMB: 1, installed: false, size: '1 M', description: 'gc', bootSeconds: null, ungetInstalled: false },
     ] },
     deps: { deps: { 'meson-1-x86_64-1': ['python3-3-x86_64-1'], 'python3-3-x86_64-1': [], 'gc-8-x86_64-1': [] }, users: { 'python3-3-x86_64-1': ['meson-1-x86_64-1'] } },
-    usage: { plugins: ['ipmi'], scripts: [] },
+    usage: { plugins: [], runtime: ['ipmi'], scripts: [] },
   };
 }
 
@@ -168,7 +168,7 @@ const input = (doc, value, scope) => [...(scope || doc).querySelectorAll('input[
   const pkgRows = doc.querySelectorAll('#pp-packages tbody tr');
   check('packages tab lists every package', pkgRows.length === 3);
   const txt = doc.getElementById('pp-packages').textContent;
-  check('packages show needed-by and plugin mentions', txt.includes('needed by meson') && txt.includes('mentioned by plugin ipmi'), txt.slice(0, 400));
+  check('packages show needed-by and who calls them', txt.includes('needed by meson') && txt.includes('called by the scripts of ipmi'), txt.slice(0, 400));
   const python = [...pkgRows].find((r) => r.textContent.includes('python3'));
   input(doc, 'Park', python).click(); await tick();
   check('parking a package others need warns', doc.getElementById('pp-dialog').textContent.includes('needs it: meson'), doc.getElementById('pp-dialog').textContent);
