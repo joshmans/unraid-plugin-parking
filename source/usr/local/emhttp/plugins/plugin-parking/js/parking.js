@@ -306,6 +306,17 @@
     const pk = state.packages.packages;
     const total = pk.filter((p) => p.where === 'boot').reduce((a, p) => a + (p.bootSeconds || 0), 0);
     root.appendChild(h('p', { class: 'pp-summary' }, plural(pk.filter((p) => p.where === 'boot').length, 'package') + ' load at boot' + (total ? ' (about ' + total + ' s at the last boot)' : '') + '; ' + pk.filter((p) => p.where === 'parked').length + ' parked.'));
+    const ug = state.packages.unget;
+    if (ug && ug.present && ug.parked) {
+      root.appendChild(h('div', { class: 'pp-unget' },
+        h('strong', {}, 'un-get cannot see parked packages. '),
+        'It only looks at /boot/extra. ',
+        h('code', {}, 'un-get upgrade'), ' downloads and installs a newer version of a parked package it tracks, so that package loads at every boot again. ',
+        h('code', {}, 'un-get cleanup'), ' offers to delete files in /boot/extra whose package is not installed (such as one you moved back with “Load at every boot” and have not loaded yet), and drops packages that are not installed from its own list. ',
+        h('code', {}, 'un-get remove'), ' leaves the parked copy behind.',
+        ug.tracked.length ? h('div', {}, 'Parked and in un-get’s list: ' + ug.tracked.join(', ') + '.') : null,
+        h('div', { class: 'pp-sub' }, 'In a terminal, un-get prints a reminder about this before those commands.')));
+    }
     root.appendChild(h('input', { type: 'button', value: 'Refresh', onclick: () => { state.deps = null; state.usage = {}; loadPackages(); } }));
     if (!pk.length) { root.appendChild(h('div', { class: 'pp-empty' }, 'There are no packages in /boot/extra.')); return; }
     const rows = pk.map((p) => h('tr', {},

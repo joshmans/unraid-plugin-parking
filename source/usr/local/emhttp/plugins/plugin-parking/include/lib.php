@@ -18,6 +18,7 @@ function pp_paths(): array {
         'rcd'     => ["$r/etc/rc.d", "$r/usr/local/etc/rc.d"],
         'state'   => "$r/boot/config/plugins/" . PP_NAME,
         'unget'   => "$r/boot/config/plugins/un-get/installedpackages_list",
+        'ungetbin' => "$r/usr/bin/un-get",
         'scripts' => "$r/boot/config/plugins/user.scripts/scripts",
         'bin'     => "$r/usr/local/sbin",
     ];
@@ -426,6 +427,16 @@ function pp_ungot(array $P): array {
     return $out;
 }
 
+/** Whether un-get is installed, and how many parked packages it tracks (it cannot see them, but keeps them in its list). */
+function pp_unget_info(array $rows, array $P): array {
+    $parked = array_values(array_filter($rows, fn($r) => $r['where'] === 'parked'));
+    return [
+        'present'   => is_file($P['ungetbin']) || is_file($P['emhttp'] . '/un-get/un-get'),
+        'parked'    => count($parked),
+        'tracked'   => array_values(array_map(fn($r) => $r['name'], array_filter($parked, fn($r) => $r['ungetInstalled']))),
+    ];
+}
+
 function pp_state_packages(array $P): array {
     $costs = pp_boot_costs($P)['packages'];
     $ung = pp_ungot($P);
@@ -445,7 +456,7 @@ function pp_state_packages(array $P): array {
         }
     }
     usort($rows, fn($a, $b) => [$a['where'] === 'parked', strtolower($a['name'])] <=> [$b['where'] === 'parked', strtolower($b['name'])]);
-    return ['packages' => $rows];
+    return ['packages' => $rows, 'unget' => pp_unget_info($rows, $P)];
 }
 
 /** Sonames a binary needs; tests replace it with $GLOBALS['pp_elf']. */

@@ -24,8 +24,8 @@ function fixture() {
     packages: { packages: [
       { file: 'meson-1-x86_64-1.txz', base: 'meson-1-x86_64-1', name: 'meson', version: '1', where: 'boot', diskMB: 2, installed: true, size: '10 M', description: 'build system', bootSeconds: 3, ungetInstalled: true },
       { file: 'python3-3-x86_64-1.txz', base: 'python3-3-x86_64-1', name: 'python3', version: '3', where: 'boot', diskMB: 24, installed: true, size: '90 M', description: 'python', bootSeconds: 9, ungetInstalled: true },
-      { file: 'gc-8-x86_64-1.txz', base: 'gc-8-x86_64-1', name: 'gc', version: '8', where: 'parked', diskMB: 1, installed: false, size: '1 M', description: 'gc', bootSeconds: null, ungetInstalled: false },
-    ] },
+      { file: 'gc-8-x86_64-1.txz', base: 'gc-8-x86_64-1', name: 'gc', version: '8', where: 'parked', diskMB: 1, installed: false, size: '1 M', description: 'gc', bootSeconds: null, ungetInstalled: true },
+    ], unget: { present: true, parked: 1, tracked: ['gc'] } },
     deps: { deps: { 'meson-1-x86_64-1': ['python3-3-x86_64-1'], 'python3-3-x86_64-1': [], 'gc-8-x86_64-1': [] }, users: { 'python3-3-x86_64-1': ['meson-1-x86_64-1'] } },
     usage: { plugins: [], runtime: ['ipmi'], scripts: [] },
   };
@@ -53,7 +53,7 @@ async function boot(opts = {}) {
     const rec = {}; b.forEach((v, k) => { rec[k] = v; }); calls.push(rec);
     let res = { ok: true };
     if (action === 'plugins') res = fx.plugins;
-    else if (action === 'packages') res = fx.packages;
+    else if (action === 'packages') res = opts.unget === undefined ? fx.packages : { packages: fx.packages.packages, unget: opts.unget };
     else if (action === 'pkg_deps') res = fx.deps;
     else if (action === 'pkg_usage') res = fx.usage;
     else if (action === 'check') res = opts.check || { ok: true, cached: '2', latest: '3', newer: true };
@@ -166,10 +166,20 @@ const input = (doc, value, scope) => [...(scope || doc).querySelectorAll('input[
   /* --- Boot Packages tab --- */
   ({ w, doc, calls } = await boot());
   await tick(120);
-  const pkgRows = doc.querySelectorAll('#pp-packages tbody tr');
+  let pkgRows = doc.querySelectorAll('#pp-packages tbody tr');
   check('packages tab lists every package', pkgRows.length === 3);
   const txt = doc.getElementById('pp-packages').textContent;
   check('packages show needed-by and who calls them', txt.includes('needed by meson') && txt.includes('called by the scripts of ipmi'), txt.slice(0, 400));
+  check('un-get notice shows when un-get is installed and something is parked', txt.includes('un-get cannot see parked packages') && txt.includes('un-get upgrade') && txt.includes('Parked and in un-get’s list: gc.'), txt.slice(0, 300));
+  ({ w, doc, calls } = await boot({ unget: { present: false, parked: 1, tracked: [] } }));
+  await tick(120);
+  check('no un-get notice when un-get is not installed', !doc.getElementById('pp-packages').textContent.includes('un-get cannot see'));
+  ({ w, doc, calls } = await boot({ unget: { present: true, parked: 0, tracked: [] } }));
+  await tick(120);
+  check('no un-get notice when nothing is parked', !doc.getElementById('pp-packages').textContent.includes('un-get cannot see'));
+  ({ w, doc, calls } = await boot());
+  await tick(120);
+  pkgRows = doc.querySelectorAll('#pp-packages tbody tr');
   const python = [...pkgRows].find((r) => r.textContent.includes('python3'));
   input(doc, 'Park', python).click(); await tick();
   check('parking a package others need warns', doc.getElementById('pp-dialog').textContent.includes('needs it: meson'), doc.getElementById('pp-dialog').textContent);

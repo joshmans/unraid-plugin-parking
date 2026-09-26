@@ -27,3 +27,6 @@
 #pp-dialog .pp-buttons button { margin-left: 8px; padding: 6px 14px; border-radius: 4px; border: 1px solid #aaa; background: #eee; color: #222; cursor: pointer; font-size: 14px; }
 #pp-dialog .pp-buttons button.pp-primary { background: #e68a00; border-color: #e68a00; color: #fff; }
 input.pp-row-park { margin-left: 6px; }
+
+.pp-unget { margin: 10px 0; padding: 8px 12px; border-left: 3px solid #d9822b; background: rgba(217, 130, 43, 0.12); }
+.pp-unget code { font-size: 0.95em; }
