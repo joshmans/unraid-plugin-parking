@@ -2,11 +2,11 @@
 <!DOCTYPE PLUGIN [
  <!ENTITY name "plugin-parking">
  <!ENTITY author "joshmans">
- <!ENTITY version "2026.09.26c">
+ <!ENTITY version "2026.09.26d">
  <!ENTITY gitURL "https://github.com/joshmans/unraid-plugin-parking">
  <!ENTITY pluginURL "&gitURL;/releases/download/&version;/&name;-&version;.txz">
  <!ENTITY plgURL "https://raw.githubusercontent.com/joshmans/unraid-plugin-parking/main/plugin-parking.plg">
- <!ENTITY sha256 "f99defbcf42acaa5511d6e235eb06d6f7bed792be6e082cb7344f0adb9fa52ac">
+ <!ENTITY sha256 "e4bae30cd692d4caf2efe77d74b50077b7494b302a14a340f6ee9df23cf21d7c">
  <!ENTITY launch "Plugins">
 ]>
 
@@ -18,6 +18,10 @@ Keep plugins and boot packages installed but not loaded at boot, and load them o
 
 <CHANGES><![CDATA[
 # Plugin Parking
+
+## 2026.09.26d
+
+- **un-get reminder.** un-get only looks at `/boot/extra`, so it cannot see parked packages, and two of its commands can undo parking: `un-get upgrade` downloads and installs a newer version of a parked package it tracks (so it loads at every boot again), and `un-get cleanup` offers to delete files in `/boot/extra` whose package is not installed (such as one you just moved back and have not loaded yet) and drops uninstalled packages from its own list. When un-get is installed and something is parked, the Boot Packages tab now says so, and in a terminal `un-get upgrade`, `cleanup` and `remove` print a short note first, then run un-get unchanged. Nothing changes if un-get is not installed or nothing is parked, and un-get itself is never modified.
 
 ## 2026.09.26c
 
@@ -70,6 +74,12 @@ chmod -R 755 /usr/local/emhttp/plugins/&name;
 find /usr/local/emhttp/plugins/&name; -type f -exec chmod 644 {} \;
 chmod 755 /usr/local/emhttp/plugins/&name;/event/started
 
+# a reminder for un-get users (un-get cannot see parked packages); only does anything in an interactive
+# bash shell when un-get is installed and something is parked. Slackware only sources executable profile.d files.
+cp /usr/local/emhttp/plugins/&name;/scripts/un-get-reminder.sh /etc/profile.d/&name;.sh
+chown root:root /etc/profile.d/&name;.sh
+chmod 755 /etc/profile.d/&name;.sh
+
 rm -f $(ls /boot/config/plugins/&name;/&name;-*.txz 2>/dev/null | grep -v "&version;")
 echo "Plugin Parking &version; installed. Open the Plugins page and look for the Parking and Boot Packages tabs."
 </INLINE>
@@ -104,6 +114,7 @@ if [ "$np" -gt 0 ] || [ "$nk" -gt 0 ]; then
 fi
 
 rm -f "$STATE/remove-decision"
+rm -f /etc/profile.d/&name;.sh
 rm -f /boot/config/plugins/&name;/&name;-*.txz
 # Unraid does not forget the package on its own: without this, reinstalling the same
 # version before a reboot is skipped as "already installed" and installs nothing
