@@ -58,6 +58,7 @@ async function boot(opts = {}) {
     else if (action === 'pkg_usage') res = fx.usage;
     else if (action === 'check') res = opts.check || { ok: true, cached: '2', latest: '3', newer: true };
     else if (action === 'parked_counts') res = opts.counts || { plugins: 1, packages: 0 };
+    else if (action === 'pkg_park_deps') res = opts.parkDeps || { ok: true, parked: ['python3'], kept: [{ name: 'gc', reasons: ['needed by other, which stays loaded'] }] };
     else if (action === 'load') res = { ok: true, output: 'installed' };
     return Promise.resolve({ text: () => Promise.resolve(JSON.stringify(res)) });
   };
@@ -175,6 +176,35 @@ const input = (doc, value, scope) => [...(scope || doc).querySelectorAll('input[
   btn(doc, 'Cancel').click(); await tick();
   const gc = [...pkgRows].find((r) => r.textContent.includes('gc'));
   check('parked package offers load and load-at-boot', !!input(doc, 'Load now…', gc) && !!input(doc, 'Load at every boot', gc));
+
+  // parking a package offers to park what it needs, then checks
+  const meson = [...pkgRows].find((r) => r.textContent.includes('meson'));
+  calls.length = 0;
+  input(doc, 'Park', meson).click(); await tick();
+  btn(doc, 'Park').click(); await tick(60);
+  const dd = doc.getElementById('pp-dialog');
+  check('parking a package with dependencies asks about them', dd && dd.textContent.includes('Park what meson needs too?') && dd.textContent.includes('python3') && calls.some((c) => c.action === 'pkg_park' && c.file === 'meson-1-x86_64-1.txz'), dd && dd.textContent);
+  check('nothing is parked before they say yes', !calls.some((c) => c.action === 'pkg_park_deps'));
+  btn(doc, 'Check and park them').click(); await tick(80);
+  const rd = doc.getElementById('pp-dialog');
+  check('the check reports what was parked and what was kept and why', rd && rd.textContent.includes('Parked: python3') && rd.textContent.includes('gc: needed by other') && calls.some((c) => c.action === 'pkg_park_deps' && c.file === 'meson-1-x86_64-1.txz'), rd && rd.textContent);
+  btn(doc, 'OK') && btn(doc, 'OK').click();
+  await tick(40);
+  // declining leaves the dependencies alone
+  ({ w, doc, calls } = await boot());
+  await tick(120);
+  const meson2 = [...doc.querySelectorAll('#pp-packages tbody tr')].find((r) => r.textContent.includes('meson'));
+  input(doc, 'Park', meson2).click(); await tick();
+  btn(doc, 'Park').click(); await tick(60);
+  btn(doc, 'No, just meson').click(); await tick(60);
+  check('saying no to the dependencies parks only the package', !calls.some((c) => c.action === 'pkg_park_deps') && calls.filter((c) => c.action === 'pkg_park').length === 1);
+  // a package with nothing to park skips the question
+  ({ w, doc, calls } = await boot());
+  await tick(120);
+  const py = [...doc.querySelectorAll('#pp-packages tbody tr')].find((r) => r.textContent.includes('python3'));
+  input(doc, 'Park', py).click(); await tick();
+  btn(doc, 'Park').click(); await tick(60);
+  check('no dependencies: no question', !doc.getElementById('pp-dialog') && calls.some((c) => c.action === 'pkg_park'));
 
   console.log(`ui_test: ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

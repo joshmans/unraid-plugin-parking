@@ -1,5 +1,9 @@
 # Plugin Parking
 
+## 2026.09.26c
+
+- Boot Packages: after you park a package, Plugin Parking offers to park what it needs too (parking `make` also offers `guile` and `gc`). If you say yes, each one is checked first, and it stays where it is if another boot package needs it or a plugin or script seems to use it. The result lists what was parked and, for anything left alone, why.
+
 ## 2026.09.26b
 
 - Boot Packages: a program called through a full path (`/usr/bin/ipmitool ...`) now counts as a use, and Plugin Parking no longer counts its own changelog as a user of a package.

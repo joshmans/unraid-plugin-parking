@@ -343,14 +343,57 @@
     return w;
   }
 
+  /** What a package needs (and what those need in turn) that still loads at boot. */
+  function bootDeps(p) {
+    const map = byBase();
+    const out = []; const seen = { [p.base]: true }; const todo = ((state.deps && state.deps.deps[p.base]) || []).slice();
+    while (todo.length) {
+      const b = todo.shift();
+      if (seen[b]) continue;
+      seen[b] = true;
+      if (map[b] && map[b].where === 'boot') out.push(b);
+      ((state.deps && state.deps.deps[b]) || []).forEach((n) => todo.push(n));
+    }
+    return out;
+  }
+
+  function parkDepsFlow(p, deps) {
+    return dialog({
+      title: 'Park what ' + p.name + ' needs too?',
+      body: [h('p', {}, p.name + ' needs ' + deps.map(nameOf).join(', ') + ', which also load at every boot.'),
+        h('p', {}, 'If you say yes, each one is checked first: any that another package needs, or that a plugin or script seems to use, is left where it is.')],
+      buttons: [{ label: 'No, just ' + p.name, value: 'no' }, { label: 'Check and park them', value: 'go', primary: true }],
+    }).then((r) => {
+      if (!r || r.button !== 'go') return null;
+      const stop = busy('Checking what else needs them…');
+      return api('pkg_park_deps', { file: p.file }).then((res) => {
+        stop();
+        if (!res.ok) return notify('Could not check them', res.error);
+        const lines = [];
+        if (res.parked.length) lines.push(h('p', {}, 'Parked: ' + res.parked.join(', ') + '.'));
+        if (res.kept.length) {
+          lines.push(h('p', {}, 'Left where they are:'));
+          lines.push(h('ul', {}, res.kept.map((k) => h('li', {}, k.name + ': ' + k.reasons.join('; ') + '.'))));
+        }
+        if (!lines.length) lines.push(h('p', {}, 'There was nothing more to park.'));
+        return notify('Dependencies checked', 'Nothing was parked that anything else needs.', h('div', {}, lines));
+      }).catch((e) => { stop(); return notify('Could not check them', e.message); });
+    });
+  }
+
   function pkgParkFlow(p) {
+    const deps = bootDeps(p);
     return dialog({
       title: 'Park ' + p.name + '?',
       body: [h('p', {}, 'It will stay on the flash drive but will not be installed at the next boot. It stays installed until then.'), warnBox(warningsForPark(p))],
       buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Park', value: 'park', primary: true }],
-    }).then((r) => (r && r.button === 'park'
-      ? api('pkg_park', { file: p.file }).then((res) => (res.ok ? loadPackages() : notify('Could not park it', res.error)))
-      : null));
+    }).then((r) => {
+      if (!r || r.button !== 'park') return null;
+      return api('pkg_park', { file: p.file }).then((res) => {
+        if (!res.ok) return notify('Could not park it', res.error);
+        return (deps.length ? parkDepsFlow(p, deps) : Promise.resolve()).then(() => loadPackages());
+      });
+    });
   }
 
   function pkgLoadFlow(p) {

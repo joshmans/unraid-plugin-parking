@@ -576,6 +576,60 @@ function pp_pkg_park(string $file, array $P): array {
     return @rename($src, "{$P['xparked']}/$file") ? ['ok' => true] : ['ok' => false, 'error' => 'Could not move the package'];
 }
 
+/**
+ * Parks the packages that a package needed, but only those nothing else still needs. Run right after the package
+ * itself was parked. Starts from everything it needs (and what those need in turn) that still loads at boot, then
+ * checks each one afresh: another boot package that needs it, or a plugin or script that seems to use it, keeps it
+ * loaded, and that in turn keeps whatever it needs.
+ * @return array{ok: bool, parked?: string[], kept?: array<int,array{name: string, reasons: string[]}>, error?: string}
+ */
+function pp_pkg_park_deps(string $file, array $P): array {
+    if (!pp_valid_pkgfile($file)) return ['ok' => false, 'error' => 'Invalid package name'];
+    $root = pp_pkg_parse($file)['base'];
+    $d = pp_pkg_deps($P);
+    $boot = [];
+    foreach (glob($P['extra'] . '/*') ?: [] as $f) if (is_file($f) && pp_valid_pkgfile(basename($f))) $boot[pp_pkg_parse(basename($f))['base']] = basename($f);
+    $nm = fn(string $b): string => pp_pkg_parse($b . '.txz')['name'];
+
+    $cand = []; $todo = $d['deps'][$root] ?? []; $seen = [$root => true];
+    while (($b = array_shift($todo)) !== null) {
+        if (isset($seen[$b])) continue;
+        $seen[$b] = true;
+        if (isset($boot[$b])) $cand[$b] = true;
+        foreach ($d['deps'][$b] ?? [] as $n) $todo[] = $n;
+    }
+
+    $kept = [];
+    foreach (array_keys($cand) as $b) {
+        $u = pp_pkg_usage($b, $P);
+        $r = [];
+        if ($u['plugins']) $r[] = 'plugin ' . implode(', ', $u['plugins']) . ' seems to use it';
+        if ($u['runtime']) $r[] = 'the scripts of ' . implode(', ', $u['runtime']) . ' call one of its programs';
+        if ($u['scripts']) $r[] = 'user script ' . implode(', ', $u['scripts']) . ' calls one of its programs';
+        if ($r) { $kept[$b] = $r; unset($cand[$b]); }
+    }
+    do {
+        $changed = false;
+        foreach (array_keys($cand) as $b) {
+            $outside = array_values(array_filter($d['users'][$b] ?? [], fn($x) => $x !== $root && isset($boot[$x]) && !isset($cand[$x])));
+            if ($outside) {
+                $kept[$b] = ['needed by ' . implode(', ', array_map($nm, $outside)) . ', which stays loaded'];
+                unset($cand[$b]);
+                $changed = true;
+            }
+        }
+    } while ($changed);
+
+    $parked = [];
+    foreach (array_keys($cand) as $b) {
+        $r = pp_pkg_park($boot[$b], $P);
+        if ($r['ok']) $parked[] = $nm($b); else $kept[$b] = [$r['error'] ?? 'could not be parked'];
+    }
+    $keptOut = [];
+    foreach ($kept as $b => $r) $keptOut[] = ['name' => $nm($b), 'reasons' => $r];
+    return ['ok' => true, 'parked' => $parked, 'kept' => $keptOut];
+}
+
 function pp_pkg_unpark(string $file, array $P): array {
     if (!pp_valid_pkgfile($file)) return ['ok' => false, 'error' => 'Invalid package name'];
     $src = "{$P['xparked']}/$file";
@@ -650,6 +704,7 @@ function pp_api(string $action, array $in, ?array $P = null): array {
         case 'pkg_deps':     return pp_pkg_deps($P);
         case 'pkg_usage':    return $s('base') !== '' && pp_valid_name($s('base')) ? pp_pkg_usage($s('base'), $P) : ['plugins' => [], 'scripts' => [], 'runtime' => []];
         case 'pkg_park':     return pp_pkg_park($s('file'), $P);
+        case 'pkg_park_deps': return pp_pkg_park_deps($s('file'), $P);
         case 'pkg_unpark':   return pp_pkg_unpark($s('file'), $P);
         case 'pkg_load':     return pp_pkg_load($s('file'), $P);
         case 'pkg_unload':   return pp_pkg_unload($s('file'), $P);

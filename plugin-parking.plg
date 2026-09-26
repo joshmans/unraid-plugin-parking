@@ -2,11 +2,11 @@
 <!DOCTYPE PLUGIN [
  <!ENTITY name "plugin-parking">
  <!ENTITY author "joshmans">
- <!ENTITY version "2026.09.26b">
+ <!ENTITY version "2026.09.26c">
  <!ENTITY gitURL "https://github.com/joshmans/unraid-plugin-parking">
  <!ENTITY pluginURL "&gitURL;/releases/download/&version;/&name;-&version;.txz">
  <!ENTITY plgURL "https://raw.githubusercontent.com/joshmans/unraid-plugin-parking/main/plugin-parking.plg">
- <!ENTITY sha256 "24898972c4702af4d333b4dab4efc18a1d028c3b997f154a13cc5edd1ecdcf3f">
+ <!ENTITY sha256 "f99defbcf42acaa5511d6e235eb06d6f7bed792be6e082cb7344f0adb9fa52ac">
  <!ENTITY launch "Plugins">
 ]>
 
@@ -18,6 +18,10 @@ Keep plugins and boot packages installed but not loaded at boot, and load them o
 
 <CHANGES><![CDATA[
 # Plugin Parking
+
+## 2026.09.26c
+
+- Boot Packages: after you park a package, Plugin Parking offers to park what it needs too (parking `make` also offers `guile` and `gc`). If you say yes, each one is checked first, and it stays where it is if another boot package needs it or a plugin or script seems to use it. The result lists what was parked and, for anything left alone, why.
 
 ## 2026.09.26b
 
