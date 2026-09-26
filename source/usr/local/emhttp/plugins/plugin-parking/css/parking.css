@@ -1,0 +1,29 @@
+.pp-root { max-width: 1400px; }
+.pp-root h3 { margin: 22px 0 6px; }
+.pp-lead { margin: 6px 0 12px; opacity: .85; }
+.pp-summary { margin: 10px 0 4px; font-weight: bold; }
+.pp-root table.pp-table { width: 100%; }
+.pp-root table.pp-table td, .pp-root table.pp-table th { vertical-align: top; }
+.pp-root .pp-name { font-weight: bold; }
+.pp-root .pp-sub { display: block; font-size: .85em; opacity: .7; }
+.pp-root .pp-num { text-align: right; white-space: nowrap; }
+.pp-root .pp-actions { white-space: nowrap; }
+.pp-root .pp-actions input { margin-right: 6px; }
+.pp-root .pp-empty { padding: 12px 0; opacity: .7; }
+.pp-badge { display: inline-block; margin: 0 4px 2px 0; padding: 0 6px; border-radius: 9px; font-size: .8em; border: 1px solid currentColor; opacity: .85; }
+.pp-badge.pp-warn { color: #d9822b; }
+.pp-badge.pp-good { color: #4c8c3b; }
+.pp-badge.pp-info { color: #267ca8; }
+
+#pp-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 100000; display: flex; align-items: center; justify-content: center; }
+#pp-dialog { background: #fff; color: #333; width: 560px; max-width: 92vw; max-height: 86vh; overflow: auto; border-radius: 6px; padding: 18px 22px; box-shadow: 0 8px 30px rgba(0,0,0,.5); font-size: 14px; line-height: 1.45; }
+#pp-dialog h4 { margin: 0 0 10px; font-size: 1.15em; color: #222; }
+#pp-dialog p { margin: 8px 0; }
+#pp-dialog .pp-choices { margin: 10px 0; }
+#pp-dialog .pp-choices label { display: block; margin: 5px 0; cursor: pointer; }
+#pp-dialog .pp-warnbox { margin: 10px 0; padding: 8px 10px; border-left: 3px solid #d9822b; background: #fdf3e6; }
+#pp-dialog pre { max-height: 240px; overflow: auto; background: #f4f4f4; padding: 8px; font-size: 12px; white-space: pre-wrap; }
+#pp-dialog .pp-buttons { margin-top: 14px; text-align: right; }
+#pp-dialog .pp-buttons button { margin-left: 8px; padding: 6px 14px; border-radius: 4px; border: 1px solid #aaa; background: #eee; color: #222; cursor: pointer; font-size: 14px; }
+#pp-dialog .pp-buttons button.pp-primary { background: #e68a00; border-color: #e68a00; color: #fff; }
+input.pp-row-park { margin-left: 6px; }

@@ -1,0 +1,12 @@
+Menu="Plugins"
+Title="Parking"
+Tag="archive"
+Markdown="false"
+---
+<?PHP
+$pp_dir = '/usr/local/emhttp/plugins/plugin-parking';
+$pp_v = (int)@filemtime("$pp_dir/js/parking.js") . '-' . (int)@filemtime("$pp_dir/css/parking.css");
+?>
+<link rel="stylesheet" type="text/css" href="/plugins/plugin-parking/css/parking.css?v=<?=$pp_v?>">
+<div id="pp-plugins" class="pp-root"><noscript>Plugin Parking needs JavaScript.</noscript></div>
+<script src="/plugins/plugin-parking/js/parking.js?v=<?=$pp_v?>"></script>

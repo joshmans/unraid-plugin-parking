@@ -1,0 +1,105 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+ <!ENTITY name "plugin-parking">
+ <!ENTITY author "joshmans">
+ <!ENTITY version "2026.09.26">
+ <!ENTITY gitURL "https://github.com/joshmans/unraid-plugin-parking">
+ <!ENTITY pluginURL "&gitURL;/releases/download/&version;/&name;-&version;.txz">
+ <!ENTITY plgURL "https://raw.githubusercontent.com/joshmans/unraid-plugin-parking/main/plugin-parking.plg">
+ <!ENTITY sha256 "6a0ecd1a83cc20f586dc17530b2b7a1f939a4869aba1742ce8101923a8b19c09">
+ <!ENTITY launch "Plugins">
+]>
+
+<PLUGIN name="&name;" Title="Plugin Parking" author="&author;" version="&version;" pluginURL="&plgURL;" launch="&launch;" icon="archive" min="7.0.0" support="&gitURL;/issues">
+
+<DESCRIPTION>
+Keep plugins and boot packages installed but not loaded at boot, and load them on demand. Adds a Parking tab and a Boot Packages tab to the Plugins page.
+</DESCRIPTION>
+
+<CHANGES><![CDATA[
+# Plugin Parking
+
+## 2026.09.26
+
+First release.
+
+- A **Parking** tab on the Plugins page. Park a plugin and it stays installed on the flash drive but is not loaded at boot. It shows what each plugin costs at boot (read from the last boot's syslog) and whether it runs anything on its own (schedules, background services, array hooks), so you can tell a tool you use now and then from something that has to stay loaded.
+- A **Park** button on each row of the built-in Installed Plugins list, and a "parked" tag on rows that are parked.
+- **Load now** for a parked plugin. It checks for a newer version first and asks whether to install the cached copy or the latest one, and whether to keep it parked afterwards or load it at every boot again.
+- A **Boot Packages** tab for the packages in `/boot/extra` (where un-get keeps what it installs and where Unraid installs from at every boot). Park a package to keep the file without installing it at boot; load or unload it on demand. It shows what needs each package, judged from shared libraries and script interpreters, plus plugins and user scripts that mention it.
+- Removing Plugin Parking asks what to do with anything still parked: move it back so it loads at every boot again, or keep it parked. From a terminal it asks there. With no answer it moves everything back rather than leave anything stranded.
+]]></CHANGES>
+
+<!-- installpkg, not upgradepkg: upgradepkg derives a package's name by stripping the last three
+     dash fields (Slackware's name-version-arch-build), so a name like this one can be taken for
+     the old version of an unrelated package and skipped. Older versions of this plugin are
+     removed explicitly first instead. -->
+<FILE Run="/bin/bash">
+<INLINE>
+for pkg in /var/log/packages/&name;-*; do
+  if [ -e "$pkg" ]; then removepkg "$(basename "$pkg")" >/dev/null 2>&amp;1; fi
+done
+exit 0
+</INLINE>
+</FILE>
+
+<FILE Name="/boot/config/plugins/&name;/&name;-&version;.txz" Run="installpkg">
+<URL>&pluginURL;</URL>
+<SHA256>&sha256;</SHA256>
+</FILE>
+
+<FILE Run="/bin/bash">
+<INLINE>
+mkdir -p /boot/config/plugins/&name;
+
+# installpkg keeps whatever modes the archive had, so set them here
+chown -R root:root /usr/local/emhttp/plugins/&name;
+chmod -R 755 /usr/local/emhttp/plugins/&name;
+find /usr/local/emhttp/plugins/&name; -type f -exec chmod 644 {} \;
+chmod 755 /usr/local/emhttp/plugins/&name;/event/started
+
+rm -f $(ls /boot/config/plugins/&name;/&name;-*.txz 2>/dev/null | grep -v "&version;")
+echo "Plugin Parking &version; installed. Open the Plugins page and look for the Parking and Boot Packages tabs."
+</INLINE>
+</FILE>
+
+<!-- Removing this plugin: anything still parked would be stranded (Unraid would never load it again),
+     so this asks what to do. From the web page the answer was collected before this ran; from a
+     terminal it is asked here; with no answer at all everything is moved back, which loses nothing. -->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+PARKED=/boot/config/plugins-parked
+XPARKED=/boot/extra-parked
+STATE=/boot/config/plugins/&name;
+np=$(ls "$PARKED"/*.plg 2>/dev/null | wc -l)
+nk=$(ls "$XPARKED"/*.txz "$XPARKED"/*.tgz "$XPARKED"/*.tbz "$XPARKED"/*.tlz 2>/dev/null | wc -l)
+
+if [ "$np" -gt 0 ] || [ "$nk" -gt 0 ]; then
+  choice=""
+  [ -f "$STATE/remove-decision" ] &amp;&amp; choice=$(tr -d '[:space:]' &lt; "$STATE/remove-decision")
+  if [ -z "$choice" ] &amp;&amp; [ -t 0 ]; then
+    read -r -p $'You have '"$np"$' parked plugin(s) and '"$nk"$' parked package(s).\n  1) Move them back so they load at every boot again (recommended)\n  2) Keep them parked (they will not load at boot)\nChoose 1 or 2 [1]: ' ans
+    if [ "$ans" = "2" ]; then choice=keep; else choice=restore; fi
+  fi
+  if [ "$choice" != "keep" ]; then
+    [ -z "$choice" ] &amp;&amp; echo "No choice was recorded, so the parked items are being moved back rather than left where nothing will load them."
+    php -r 'require "/usr/local/emhttp/plugins/&name;/include/lib.php"; $m = pp_restore_all(pp_paths()); echo "Moved back to the normal locations: ".$m["plugins"]." plugin(s), ".$m["packages"]." package(s).\n"; if (count($m["skipped"])) echo "Left parked because a file with the same name already exists: ".implode(", ", $m["skipped"])."\n";' || echo "Could not move the parked items back. They are still in $PARKED and $XPARKED."
+  else
+    echo "Keeping the parked items where they are. They will not load at boot. To load one by hand:"
+    echo "  plugin install $PARKED/NAME.plg"
+    echo "  upgradepkg --install-new $XPARKED/NAME.txz"
+  fi
+fi
+
+rm -f "$STATE/remove-decision"
+rm -f /boot/config/plugins/&name;/&name;-*.txz
+# Unraid does not forget the package on its own: without this, reinstalling the same
+# version before a reboot is skipped as "already installed" and installs nothing
+for pkg in /var/log/packages/&name;-*; do
+  [ -e "$pkg" ] &amp;&amp; removepkg "$(basename "$pkg")" >/dev/null 2>&amp;1
+done
+rm -rf /usr/local/emhttp/plugins/&name;
+</INLINE>
+</FILE>
+
+</PLUGIN>

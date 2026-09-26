@@ -1,0 +1,5 @@
+#!/bin/bash
+# Runs when the array starts. Remembers what each plugin and package cost at this boot,
+# because the syslog is rotated later in the day and the Parking tab reads it from there.
+php -r 'require "/usr/local/emhttp/plugins/plugin-parking/include/lib.php"; pp_boot_costs(pp_paths());' >/dev/null 2>&1
+exit 0
