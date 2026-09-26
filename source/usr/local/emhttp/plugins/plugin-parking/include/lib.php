@@ -540,12 +540,13 @@ function pp_pkg_usage(string $base, array $P): array {
     $cmd = ''; $alt = '';
     if ($progs) {
         $alt = implode('|', array_map(fn($x) => preg_quote($x, '/'), array_keys($progs)));
-        $cmd = '/(?:^|[;&|`(\'"]|\$\()[ \t]*(?:' . $alt . ')(?![A-Za-z0-9_.-])/m';
+        $cmd = '/(?:^|[;&|`(\'"]|\$\()[ \t]*(?:\/?(?:[A-Za-z0-9_.-]+\/)*)?(?:' . $alt . ')(?![A-Za-z0-9_.-])/m';
     }
     $fileName = '/(?<![A-Za-z0-9_.-])' . preg_quote($name, '/') . '-[0-9]/';
     $uses = fn(string $t): bool => preg_match($fileName, $t) === 1 || ($cmd !== '' && preg_match($cmd, $t) === 1);
     $plugins = []; $scripts = []; $runtime = [];
     foreach (array_merge(glob($P['plugins'] . '/*.plg') ?: [], glob($P['parked'] . '/*.plg') ?: []) as $f) {
+        if (basename($f, '.plg') === PP_NAME) continue;
         $t = @file_get_contents($f);
         if ($t !== false && $uses($t)) $plugins[] = basename($f, '.plg');
     }
