@@ -267,6 +267,11 @@ check('usage: prose is not a call, core folders are skipped', !in_array('prose',
 put("{$P['varpkg']}/binutils-2.46-x86_64-1", "PACKAGE NAME:  binutils-2.46-x86_64-1\nFILE LIST:\n./\nusr/bin/\nusr/bin/size\nusr/bin/strip\nusr/bin/ld\n");
 put("{$P['emhttp']}/ipmi/scripts/words.php", "<?php\n\$size = 5;\nsize the icons\nstrip trailing\n");
 $us4 = pp_pkg_usage('binutils-2.46-x86_64-1', $P);
+put("{$P['emhttp']}/pathy/run.sh", "#!/bin/bash\nout=$(/usr/bin/ipmitool chassis status)\n");
+check('usage: a call through a full path counts', in_array('pathy', pp_pkg_usage('ipmitool-1.8.19-x86_64-2_SBo', $P)['runtime']));
+put("{$P['plugins']}/plugin-parking.plg", plg('plugin-parking', '1', 'https://h.test/pp.plg', "<CHANGES>calls `ipmitool` from its PHP</CHANGES>"));
+check('usage: Plugin Parking does not count itself as a user', !in_array('plugin-parking', pp_pkg_usage('ipmitool-1.8.19-x86_64-2_SBo', $P)['plugins']));
+@unlink("{$P['plugins']}/plugin-parking.plg");
 check('usage: ordinary words that are also program names never count', $us4['runtime'] === [] && $us4['plugins'] === [] && $us4['scripts'] === [], json_encode($us4));
 check('usage: user script calling its program', $us['scripts'] === ['fan-check'], json_encode($us));
 

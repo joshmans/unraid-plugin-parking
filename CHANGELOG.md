@@ -1,5 +1,9 @@
 # Plugin Parking
 
+## 2026.09.26b
+
+- Boot Packages: a program called through a full path (`/usr/bin/ipmitool ...`) now counts as a use, and Plugin Parking no longer counts its own changelog as a user of a package.
+
 ## 2026.09.26a
 
 - The "used by" hints on the Boot Packages tab are more accurate. They now also look inside plugins' own scripts (so a plugin that calls `ipmitool` from its PHP is found), and ordinary words that happen to be program names (`size`, `strip`, `make`...) no longer count as a sign that a package is used.
