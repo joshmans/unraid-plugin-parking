@@ -2,11 +2,11 @@
 <!DOCTYPE PLUGIN [
  <!ENTITY name "plugin-parking">
  <!ENTITY author "joshmans">
- <!ENTITY version "2026.09.26d">
+ <!ENTITY version "2026.09.26e">
  <!ENTITY gitURL "https://github.com/joshmans/unraid-plugin-parking">
  <!ENTITY pluginURL "&gitURL;/releases/download/&version;/&name;-&version;.txz">
  <!ENTITY plgURL "https://raw.githubusercontent.com/joshmans/unraid-plugin-parking/main/plugin-parking.plg">
- <!ENTITY sha256 "e4bae30cd692d4caf2efe77d74b50077b7494b302a14a340f6ee9df23cf21d7c">
+ <!ENTITY sha256 "99275a10382ceb5ffa809d65b4c24b12749d5d04d7b98529989bf809fff5a5d4">
  <!ENTITY launch "Plugins">
 ]>
 
@@ -18,6 +18,12 @@ Keep plugins and boot packages installed but not loaded at boot, and load them o
 
 <CHANGES><![CDATA[
 # Plugin Parking
+
+## 2026.09.26e
+
+- **Parked packages no longer get undone by un-get.** `un-get upgrade` installs newer versions of everything on its list, which pulled a parked package back into `/boot/extra`, and `un-get cleanup` drops packages that are not installed from its list. While a package is parked, its entry is now taken out of un-get's list and remembered; **Load at every boot** puts it back. Packages that were already parked are handled the next time you open the Boot Packages tab, and a copy of un-get's list as it was is kept (`/boot/config/plugins/plugin-parking/unget-list.original`). un-get itself is not modified.
+- **Load at every boot** for a package that is not installed right now (and un-get is present) now explains that `un-get cleanup` would offer to delete it, and installs it now by default.
+- The reminder in a terminal and the notice on the tab now describe this instead of only warning about it.
 
 ## 2026.09.26d
 

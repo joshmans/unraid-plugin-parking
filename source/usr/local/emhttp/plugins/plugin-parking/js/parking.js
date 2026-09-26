@@ -260,7 +260,7 @@
   /* ---------- Boot Packages tab ---------- */
 
   function loadPackages() {
-    return api('packages').then((s) => {
+    return api('unget_sync').catch(() => null).then(() => api('packages')).then((s) => {
       state.packages = s;
       renderPackages();
       if (!state.deps) {
@@ -309,12 +309,11 @@
     const ug = state.packages.unget;
     if (ug && ug.present && ug.parked) {
       root.appendChild(h('div', { class: 'pp-unget' },
-        h('strong', {}, 'un-get cannot see parked packages. '),
-        'It only looks at /boot/extra. ',
-        h('code', {}, 'un-get upgrade'), ' downloads and installs a newer version of a parked package it tracks, so that package loads at every boot again. ',
-        h('code', {}, 'un-get cleanup'), ' offers to delete files in /boot/extra whose package is not installed (such as one you moved back with “Load at every boot” and have not loaded yet), and drops packages that are not installed from its own list. ',
-        h('code', {}, 'un-get remove'), ' leaves the parked copy behind.',
-        ug.tracked.length ? h('div', {}, 'Parked and in un-get’s list: ' + ug.tracked.join(', ') + '.') : null,
+        h('strong', {}, 'un-get and parked packages. '),
+        'un-get only looks at /boot/extra and keeps a list of what it installed. While a package is parked it is taken out of that list, so ',
+        h('code', {}, 'un-get upgrade'), ' does not pull it back into /boot/extra and ', h('code', {}, 'un-get cleanup'), ' does not drop it; the entry goes back when you load it at every boot. ',
+        h('code', {}, 'un-get remove'), ' still leaves a parked copy behind.',
+        ug.held.length ? h('div', {}, 'Held out of un-get’s list: ' + ug.held.join(', ') + '.') : null,
         h('div', { class: 'pp-sub' }, 'In a terminal, un-get prints a reminder about this before those commands.')));
     }
     root.appendChild(h('input', { type: 'button', value: 'Refresh', onclick: () => { state.deps = null; state.usage = {}; loadPackages(); } }));
@@ -337,8 +336,31 @@
     const out = [];
     if (!p.installed) out.push(h('input', { type: 'button', value: 'Load now…', onclick: () => pkgLoadFlow(p) }));
     else out.push(h('input', { type: 'button', value: 'Unload now…', onclick: () => pkgUnloadFlow(p) }));
-    out.push(h('input', { type: 'button', value: 'Load at every boot', onclick: () => api('pkg_unpark', { file: p.file }).then((r) => (r.ok ? loadPackages() : notify('Could not move it back', r.error))) }));
+    out.push(h('input', { type: 'button', value: 'Load at every boot', onclick: () => pkgUnparkFlow(p) }));
     return out;
+  }
+
+  function pkgUnparkFlow(p) {
+    const move = () => api('pkg_unpark', { file: p.file }).then((r) => (r.ok ? true : notify('Could not move it back', r.error).then(() => false)));
+    const ug = state.packages && state.packages.unget;
+    if (p.installed || !(ug && ug.present)) return move().then((ok) => (ok ? loadPackages() : null));
+    return dialog({
+      title: 'Load ' + p.name + ' at every boot?',
+      body: [h('p', {}, p.name + ' is not installed right now. Left that way in /boot/extra, ', h('code', {}, 'un-get cleanup'), ' would offer to delete it, because it deletes files whose package is not installed.')],
+      choices: [{ name: 'when', options: [
+        { value: 'now', label: 'Move it back and install it now (recommended)', checked: true },
+        { value: 'later', label: 'Only move it back; it installs at the next boot' } ] }],
+      buttons: [{ label: 'Cancel', value: 'no' }, { label: 'Continue', value: 'go', primary: true }],
+    }).then((r) => {
+      if (!r || r.button !== 'go') return null;
+      return move().then((ok) => {
+        if (!ok) return null;
+        if (r.picks.when !== 'now') return loadPackages();
+        const stop = busy('Installing ' + p.name + '…');
+        return api('pkg_load', { file: p.file }).then((res) => { stop(); return res.ok ? loadPackages() : notify('Moved back, but it could not be installed now', res.error, res.output ? h('pre', {}, res.output) : null).then(() => loadPackages()); })
+          .catch((e) => { stop(); return notify('Moved back, but it could not be installed now', e.message); });
+      });
+    });
   }
 
   function warningsForPark(p) {

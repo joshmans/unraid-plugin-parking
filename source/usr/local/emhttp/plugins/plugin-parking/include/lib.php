@@ -427,19 +427,83 @@ function pp_ungot(array $P): array {
     return $out;
 }
 
-/** Whether un-get is installed, and how many parked packages it tracks (it cannot see them, but keeps them in its list). */
+/*
+ * un-get keeps a list of what it installed (installedpackages_list) and works from it: `upgrade` re-downloads and
+ * installs newer versions of everything listed, `cleanup` prunes entries whose package is not installed. A parked
+ * package is not installed, so left in that list it would be pulled back into /boot/extra or dropped from the list.
+ * So while a package is parked its entry is taken out of the list and remembered here (unget-held); moving the
+ * package back to boot puts the entry back. un-get itself is not touched, only its list file.
+ */
+
+function pp_unget_held_file(array $P): string { return $P['state'] . '/unget-held'; }
+
+/** @return array<string,true> file names taken out of un-get's list because the package is parked */
+function pp_unget_held(array $P): array {
+    $out = [];
+    foreach (@file(pp_unget_held_file($P), FILE_IGNORE_NEW_LINES) ?: [] as $l) if (trim($l) !== '') $out[trim($l)] = true;
+    return $out;
+}
+
+function pp_unget_write_held(array $held, array $P): bool {
+    $f = pp_unget_held_file($P);
+    if (!$held) { @unlink($f); return true; }
+    return pp_write_atomic($f, implode("\n", array_keys($held)) . "\n");
+}
+
+/** Takes a package out of un-get's list (if it is listed) and remembers it. */
+function pp_unget_hold(string $file, array $P): bool {
+    $lines = @file($P['unget'], FILE_IGNORE_NEW_LINES);
+    if ($lines === false) return false;
+    $keep = array_values(array_filter($lines, fn($l) => trim($l) !== $file));
+    if (count($keep) === count($lines)) return false;
+    // the first time, keep a copy of the list as un-get left it
+    $bak = $P['state'] . '/unget-list.original';
+    if (!is_file($bak)) pp_write_atomic($bak, implode("\n", $lines) . "\n");
+    if (!pp_write_atomic($P['unget'], $keep ? implode("\n", $keep) . "\n" : '')) return false;
+    $held = pp_unget_held($P);
+    $held[$file] = true;
+    pp_unget_write_held($held, $P);
+    return true;
+}
+
+/** Puts a held package back into un-get's list. Drops the memory if un-get is gone. */
+function pp_unget_release(string $file, array $P): bool {
+    $held = pp_unget_held($P);
+    if (!isset($held[$file])) return false;
+    $ok = true;
+    if (is_dir(dirname($P['unget']))) {
+        $lines = @file($P['unget'], FILE_IGNORE_NEW_LINES) ?: [];
+        if (!in_array($file, array_map('trim', $lines), true)) {
+            $lines[] = $file;
+            $ok = pp_write_atomic($P['unget'], implode("\n", array_filter($lines, fn($l) => trim($l) !== '')) . "\n");
+        }
+    }
+    if ($ok) { unset($held[$file]); pp_unget_write_held($held, $P); }
+    return $ok;
+}
+
+/** Takes every already-parked package out of un-get's list (packages parked before this existed, or by hand). */
+function pp_unget_sync(array $P): array {
+    $moved = [];
+    foreach (glob($P['xparked'] . '/*') ?: [] as $f) {
+        if (is_file($f) && pp_valid_pkgfile(basename($f)) && pp_unget_hold(basename($f), $P)) $moved[] = basename($f);
+    }
+    return ['ok' => true, 'held' => $moved];
+}
+
+/** Whether un-get is installed, and which parked packages are held out of its list. */
 function pp_unget_info(array $rows, array $P): array {
     $parked = array_values(array_filter($rows, fn($r) => $r['where'] === 'parked'));
     return [
-        'present'   => is_file($P['ungetbin']) || is_file($P['emhttp'] . '/un-get/un-get'),
-        'parked'    => count($parked),
-        'tracked'   => array_values(array_map(fn($r) => $r['name'], array_filter($parked, fn($r) => $r['ungetInstalled']))),
+        'present' => is_file($P['ungetbin']) || is_file($P['emhttp'] . '/un-get/un-get'),
+        'parked'  => count($parked),
+        'held'    => array_values(array_map(fn($r) => $r['name'], array_filter($parked, fn($r) => $r['ungetInstalled']))),
     ];
 }
 
 function pp_state_packages(array $P): array {
     $costs = pp_boot_costs($P)['packages'];
-    $ung = pp_ungot($P);
+    $ung = pp_ungot($P) + pp_unget_held($P);
     $rows = [];
     foreach (['extra' => 'boot', 'xparked' => 'parked'] as $dirKey => $where) {
         foreach (glob($P[$dirKey] . '/*') ?: [] as $f) {
@@ -584,7 +648,9 @@ function pp_pkg_park(string $file, array $P): array {
     $src = "{$P['extra']}/$file";
     if (!is_file($src)) return ['ok' => false, 'error' => 'Package not found in /boot/extra'];
     if (!is_dir($P['xparked']) && !@mkdir($P['xparked'], 0700, true)) return ['ok' => false, 'error' => 'Cannot create ' . $P['xparked']];
-    return @rename($src, "{$P['xparked']}/$file") ? ['ok' => true] : ['ok' => false, 'error' => 'Could not move the package'];
+    if (!@rename($src, "{$P['xparked']}/$file")) return ['ok' => false, 'error' => 'Could not move the package'];
+    pp_unget_hold($file, $P);
+    return ['ok' => true];
 }
 
 /**
@@ -647,7 +713,9 @@ function pp_pkg_unpark(string $file, array $P): array {
     if (!is_file($src)) return ['ok' => false, 'error' => 'Not parked'];
     if (is_file("{$P['extra']}/$file")) return ['ok' => false, 'error' => 'Already in /boot/extra'];
     if (!is_dir($P['extra'])) @mkdir($P['extra'], 0755, true);
-    return @rename($src, "{$P['extra']}/$file") ? ['ok' => true] : ['ok' => false, 'error' => 'Could not move the package'];
+    if (!@rename($src, "{$P['extra']}/$file")) return ['ok' => false, 'error' => 'Could not move the package'];
+    pp_unget_release($file, $P);
+    return ['ok' => true];
 }
 
 /** Installs a package now, from wherever it is stored (the same way Unraid installs /boot/extra at boot). */
@@ -694,7 +762,7 @@ function pp_restore_all(array $P): array {
         if (!is_dir($P['extra'])) @mkdir($P['extra'], 0755, true);
         $dst = "{$P['extra']}/" . basename($f);
         if (is_file($dst)) { $moved['skipped'][] = basename($f); continue; }
-        if (@rename($f, $dst)) $moved['packages']++;
+        if (@rename($f, $dst)) { $moved['packages']++; pp_unget_release(basename($f), $P); }
     }
     @rmdir($P['parked']); @rmdir($P['xparked']);
     return $moved;
@@ -716,6 +784,7 @@ function pp_api(string $action, array $in, ?array $P = null): array {
         case 'pkg_usage':    return $s('base') !== '' && pp_valid_name($s('base')) ? pp_pkg_usage($s('base'), $P) : ['plugins' => [], 'scripts' => [], 'runtime' => []];
         case 'pkg_park':     return pp_pkg_park($s('file'), $P);
         case 'pkg_park_deps': return pp_pkg_park_deps($s('file'), $P);
+        case 'unget_sync':   return pp_unget_sync($P);
         case 'pkg_unpark':   return pp_pkg_unpark($s('file'), $P);
         case 'pkg_load':     return pp_pkg_load($s('file'), $P);
         case 'pkg_unload':   return pp_pkg_unload($s('file'), $P);

@@ -202,14 +202,15 @@ $byName = array_column($pk, null, 'name');
 check('packages listed (notes.txt ignored)', count($pk) === 2 && isset($byName['binutils']) && isset($byName['sg3_utils-1.48']), json_encode(array_column($pk, 'name')));
 check('package info: installed/size/desc/un-get', $byName['binutils']['installed'] === true && $byName['binutils']['size'] === '47 M' && strpos($byName['binutils']['description'], 'GNU binary utilities') !== false && $byName['binutils']['ungetInstalled'] === true && $byName['binutils']['version'] === '2.46');
 $ug = pp_state_packages($P)['unget'];
-check('unget info: not installed, nothing parked', $ug['present'] === false && $ug['parked'] === 0 && $ug['tracked'] === [], json_encode($ug));
+check('unget info: not installed, nothing parked', $ug['present'] === false && $ug['parked'] === 0 && $ug['held'] === [], json_encode($ug));
 put("{$P['ungetbin']}", "#!/bin/bash\n");
 check('unget info: detects un-get', pp_state_packages($P)['unget']['present'] === true);
 check('package not installed detected', $byName['sg3_utils-1.48']['installed'] === false);
 check('package park invalid', pp_pkg_park('../x.txz', $P)['ok'] === false && pp_pkg_park('nothere.txz', $P)['ok'] === false);
 check('package park', pp_pkg_park('binutils-2.46-x86_64-1.txz', $P)['ok'] === true && is_file("{$P['xparked']}/binutils-2.46-x86_64-1.txz") && !is_file("{$P['extra']}/binutils-2.46-x86_64-1.txz"));
+check('park takes the package out of un-get\'s list and remembers it', trim(file_get_contents($P['unget'])) === '' && pp_unget_held($P) === ['binutils-2.46-x86_64-1.txz' => true], json_encode([file_get_contents($P['unget']), pp_unget_held($P)]));
 $ug2 = pp_state_packages($P)['unget'];
-check('unget info: counts parked packages and the ones un-get tracks', $ug2['parked'] === 1 && $ug2['tracked'] === ['binutils'], json_encode($ug2));
+check('unget info: counts parked packages and the ones held out of un-get\'s list', $ug2['parked'] === 1 && $ug2['held'] === ['binutils'], json_encode($ug2));
 $pk = array_column(pp_state_packages($P)['packages'], null, 'name');
 check('parked package reported as parked', $pk['binutils']['where'] === 'parked' && $pk['sg3_utils-1.48']['where'] === 'boot');
 $GLOBALS['pp_run'] = function (string $cmd) { $GLOBALS['ran'][] = $cmd; return [0, 'ok']; };
@@ -219,6 +220,30 @@ check('package unload runs removepkg on the base name', pp_pkg_unload('binutils-
 check('package unload when not installed', pp_pkg_unload('sg3_utils-1.48.tgz', $P)['ok'] === false);
 unset($GLOBALS['pp_run']);
 check('package unpark', pp_pkg_unpark('binutils-2.46-x86_64-1.txz', $P)['ok'] === true && is_file("{$P['extra']}/binutils-2.46-x86_64-1.txz"));
+check('the first hold keeps a copy of un-get\'s list as it was', trim(file_get_contents($P['state'] . '/unget-list.original')) === 'binutils-2.46-x86_64-1.txz');
+check('unpark puts it back into un-get\'s list and forgets it', trim(file_get_contents($P['unget'])) === 'binutils-2.46-x86_64-1.txz' && pp_unget_held($P) === [] && !is_file(pp_unget_held_file($P)));
+pp_pkg_park('binutils-2.46-x86_64-1.txz', $P); pp_pkg_unpark('binutils-2.46-x86_64-1.txz', $P);
+check('park then unpark twice leaves one entry, not two', substr_count(file_get_contents($P['unget']), 'binutils') === 1);
+put($P['unget'], "other-1.txz\nsg3_utils-1.48.tgz\nbinutils-2.46-x86_64-1.txz\nlast-2.txz\n");
+pp_pkg_park('sg3_utils-1.48.tgz', $P);
+check('holding removes only that line and keeps the others in order', file_get_contents($P['unget']) === "other-1.txz\nbinutils-2.46-x86_64-1.txz\nlast-2.txz\n", file_get_contents($P['unget']));
+pp_pkg_unpark('sg3_utils-1.48.tgz', $P);
+check('release appends the entry at the end', file_get_contents($P['unget']) === "other-1.txz\nbinutils-2.46-x86_64-1.txz\nlast-2.txz\nsg3_utils-1.48.tgz\n", file_get_contents($P['unget']));
+@unlink($P['unget']);
+pp_pkg_park('sg3_utils-1.48.tgz', $P);
+check('no un-get list: parking works and nothing is held', is_file("{$P['xparked']}/sg3_utils-1.48.tgz") && pp_unget_held($P) === [] && !is_file($P['unget']));
+pp_pkg_unpark('sg3_utils-1.48.tgz', $P);
+check('no un-get list: unparking does not create one', !is_file($P['unget']));
+put($P['unget'], "binutils-2.46-x86_64-1.txz\nsg3_utils-1.48.tgz\n");
+pp_pkg_park('binutils-2.46-x86_64-1.txz', $P); pp_pkg_park('sg3_utils-1.48.tgz', $P);
+put($P['unget'], "binutils-2.46-x86_64-1.txz\nkeep-1.txz\n");   // parked by hand earlier, then listed again
+$sy = pp_unget_sync($P);
+check('sync takes already-parked packages out of the list', $sy['held'] === ['binutils-2.46-x86_64-1.txz'] && trim(file_get_contents($P['unget'])) === 'keep-1.txz', json_encode([$sy, file_get_contents($P['unget'])]));
+check('sync is idempotent', pp_unget_sync($P)['held'] === []);
+$rs = pp_restore_all($P);
+check('restore-all puts held entries back', $rs['packages'] === 2 && in_array('binutils-2.46-x86_64-1.txz', array_map('trim', file($P['unget']))) && in_array('sg3_utils-1.48.tgz', array_map('trim', file($P['unget']))) && pp_unget_held($P) === [], json_encode([$rs, file_get_contents($P['unget'])]));
+@unlink($P['unget']); @unlink(pp_unget_held_file($P)); @unlink($P['ungetbin']);
+put($P['unget'], "binutils-2.46-x86_64-1.txz\n");
 check('package unpark when not parked', pp_pkg_unpark('binutils-2.46-x86_64-1.txz', $P)['ok'] === false);
 
 /* ---------- package dependencies (linkage + interpreters) ---------- */

@@ -25,7 +25,7 @@ function fixture() {
       { file: 'meson-1-x86_64-1.txz', base: 'meson-1-x86_64-1', name: 'meson', version: '1', where: 'boot', diskMB: 2, installed: true, size: '10 M', description: 'build system', bootSeconds: 3, ungetInstalled: true },
       { file: 'python3-3-x86_64-1.txz', base: 'python3-3-x86_64-1', name: 'python3', version: '3', where: 'boot', diskMB: 24, installed: true, size: '90 M', description: 'python', bootSeconds: 9, ungetInstalled: true },
       { file: 'gc-8-x86_64-1.txz', base: 'gc-8-x86_64-1', name: 'gc', version: '8', where: 'parked', diskMB: 1, installed: false, size: '1 M', description: 'gc', bootSeconds: null, ungetInstalled: true },
-    ], unget: { present: true, parked: 1, tracked: ['gc'] } },
+    ], unget: { present: true, parked: 1, held: ['gc'] } },
     deps: { deps: { 'meson-1-x86_64-1': ['python3-3-x86_64-1'], 'python3-3-x86_64-1': [], 'gc-8-x86_64-1': [] }, users: { 'python3-3-x86_64-1': ['meson-1-x86_64-1'] } },
     usage: { plugins: [], runtime: ['ipmi'], scripts: [] },
   };
@@ -170,13 +170,14 @@ const input = (doc, value, scope) => [...(scope || doc).querySelectorAll('input[
   check('packages tab lists every package', pkgRows.length === 3);
   const txt = doc.getElementById('pp-packages').textContent;
   check('packages show needed-by and who calls them', txt.includes('needed by meson') && txt.includes('called by the scripts of ipmi'), txt.slice(0, 400));
-  check('un-get notice shows when un-get is installed and something is parked', txt.includes('un-get cannot see parked packages') && txt.includes('un-get upgrade') && txt.includes('Parked and in un-get’s list: gc.'), txt.slice(0, 300));
-  ({ w, doc, calls } = await boot({ unget: { present: false, parked: 1, tracked: [] } }));
+  check('un-get notice shows when un-get is installed and something is parked', txt.includes('un-get and parked packages') && txt.includes('un-get upgrade') && txt.includes('Held out of un-get’s list: gc.'), txt.slice(0, 300));
+  check('the tab syncs un-get\'s list before listing', calls.findIndex((c) => c.action === 'unget_sync') !== -1 && calls.findIndex((c) => c.action === 'unget_sync') < calls.findIndex((c) => c.action === 'packages'));
+  ({ w, doc, calls } = await boot({ unget: { present: false, parked: 1, held: [] } }));
   await tick(120);
-  check('no un-get notice when un-get is not installed', !doc.getElementById('pp-packages').textContent.includes('un-get cannot see'));
-  ({ w, doc, calls } = await boot({ unget: { present: true, parked: 0, tracked: [] } }));
+  check('no un-get notice when un-get is not installed', !doc.getElementById('pp-packages').textContent.includes('un-get and parked packages'));
+  ({ w, doc, calls } = await boot({ unget: { present: true, parked: 0, held: [] } }));
   await tick(120);
-  check('no un-get notice when nothing is parked', !doc.getElementById('pp-packages').textContent.includes('un-get cannot see'));
+  check('no un-get notice when nothing is parked', !doc.getElementById('pp-packages').textContent.includes('un-get and parked packages'));
   ({ w, doc, calls } = await boot());
   await tick(120);
   pkgRows = doc.querySelectorAll('#pp-packages tbody tr');
@@ -184,6 +185,21 @@ const input = (doc, value, scope) => [...(scope || doc).querySelectorAll('input[
   input(doc, 'Park', python).click(); await tick();
   check('parking a package others need warns', doc.getElementById('pp-dialog').textContent.includes('needs it: meson'), doc.getElementById('pp-dialog').textContent);
   btn(doc, 'Cancel').click(); await tick();
+  // moving a parked, not-installed package back: the un-get cleanup trap is explained and installing now is the default
+  const gcRow = [...doc.querySelectorAll('#pp-packages tbody tr')].find((r) => r.textContent.includes('gc'));
+  calls.length = 0;
+  input(doc, 'Load at every boot', gcRow).click(); await tick(60);
+  const ud = doc.getElementById('pp-dialog');
+  check('moving back an uninstalled package explains the cleanup trap', ud && ud.textContent.includes('un-get cleanup') && ud.textContent.includes('not installed right now'), ud && ud.textContent);
+  check('nothing moves before the answer', !calls.some((c) => c.action === 'pkg_unpark'));
+  btn(doc, 'Continue').click(); await tick(100);
+  const seq = calls.map((c) => c.action).filter((x) => x === 'pkg_unpark' || x === 'pkg_load');
+  check('the default moves it back and installs it now', seq.join(',') === 'pkg_unpark,pkg_load', seq.join(','));
+  calls.length = 0;
+  input(doc, 'Load at every boot', [...doc.querySelectorAll('#pp-packages tbody tr')].find((r) => r.textContent.includes('gc'))).click(); await tick(60);
+  [...doc.querySelectorAll('#pp-dialog input[type=radio]')].forEach((r) => { if (r.parentNode.textContent.includes('Only move it back')) { r.checked = true; r.dispatchEvent(new w.Event('change')); } });
+  btn(doc, 'Continue').click(); await tick(100);
+  check('"only move it back" does not install', calls.some((c) => c.action === 'pkg_unpark') && !calls.some((c) => c.action === 'pkg_load'));
   const gc = [...pkgRows].find((r) => r.textContent.includes('gc'));
   check('parked package offers load and load-at-boot', !!input(doc, 'Load now…', gc) && !!input(doc, 'Load at every boot', gc));
 

@@ -1,5 +1,11 @@
 # Plugin Parking
 
+## 2026.09.26e
+
+- **Parked packages no longer get undone by un-get.** `un-get upgrade` installs newer versions of everything on its list, which pulled a parked package back into `/boot/extra`, and `un-get cleanup` drops packages that are not installed from its list. While a package is parked, its entry is now taken out of un-get's list and remembered; **Load at every boot** puts it back. Packages that were already parked are handled the next time you open the Boot Packages tab, and a copy of un-get's list as it was is kept (`/boot/config/plugins/plugin-parking/unget-list.original`). un-get itself is not modified.
+- **Load at every boot** for a package that is not installed right now (and un-get is present) now explains that `un-get cleanup` would offer to delete it, and installs it now by default.
+- The reminder in a terminal and the notice on the tab now describe this instead of only warning about it.
+
 ## 2026.09.26d
 
 - **un-get reminder.** un-get only looks at `/boot/extra`, so it cannot see parked packages, and two of its commands can undo parking: `un-get upgrade` downloads and installs a newer version of a parked package it tracks (so it loads at every boot again), and `un-get cleanup` offers to delete files in `/boot/extra` whose package is not installed (such as one you just moved back and have not loaded yet) and drops uninstalled packages from its own list. When un-get is installed and something is parked, the Boot Packages tab now says so, and in a terminal `un-get upgrade`, `cleanup` and `remove` print a short note first, then run un-get unchanged. Nothing changes if un-get is not installed or nothing is parked, and un-get itself is never modified.
