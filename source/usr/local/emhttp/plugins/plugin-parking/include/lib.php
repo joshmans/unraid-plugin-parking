@@ -21,6 +21,7 @@ function pp_paths(): array {
         'ungetbin' => "$r/usr/bin/un-get",
         'scripts' => "$r/boot/config/plugins/user.scripts/scripts",
         'bin'     => "$r/usr/local/sbin",
+        'tmpplg'  => "$r/tmp/plugins",
     ];
 }
 
@@ -75,6 +76,26 @@ function pp_write_atomic(string $file, string $data): bool {
 
 /* ---------- reading a .plg ---------- */
 
+/**
+ * The attributes of the <PLUGIN> tag, read the way Unraid's plugin manager reads them: as XML, with the
+ * DOCTYPE's entities resolved. Returns null when the text is not a usable plugin file, so the caller can fall
+ * back to the plain-text reader below.
+ *
+ * A .plg can come from the network (the update check), so one that declares an external entity is refused:
+ * with entity substitution on, a SYSTEM entity would pull a local file into the attribute values.
+ */
+function pp_plg_attrs(string $text): ?array {
+    if (preg_match('/<!ENTITY[^>]*\b(SYSTEM|PUBLIC)\b/i', $text)) return null;
+    $prev = libxml_use_internal_errors(true);
+    $xml = simplexml_load_string($text, 'SimpleXMLElement', LIBXML_NOENT | LIBXML_NONET | LIBXML_NOCDATA);
+    libxml_clear_errors();
+    libxml_use_internal_errors($prev);
+    if ($xml === false || $xml->getName() !== 'PLUGIN') return null;
+    $attrs = [];
+    foreach ($xml->attributes() as $k => $v) $attrs[(string)$k] = (string)$v;
+    return $attrs;
+}
+
 function pp_parse_plg(string $text): array {
     $ent = [];
     if (preg_match_all('/<!ENTITY\s+(\S+)\s+"([^"]*)"\s*>/', $text, $m, PREG_SET_ORDER)) {
@@ -88,10 +109,14 @@ function pp_parse_plg(string $text): array {
         }
         return $s;
     };
-    $attrs = [];
-    if (preg_match('/<PLUGIN\b([^>]*)>/s', $text, $t)) {
-        if (preg_match_all('/([A-Za-z_]+)\s*=\s*(?:"([^"]*)"|\'([^\']*)\')/', $t[1], $a, PREG_SET_ORDER)) {
-            foreach ($a as $x) $attrs[$x[1]] = $sub($x[2] !== '' || !isset($x[3]) ? $x[2] : $x[3]);
+    $attrs = pp_plg_attrs($text);
+    if ($attrs === null) {
+        // Not parseable as XML (or it declares an external entity): read the tag as plain text.
+        $attrs = [];
+        if (preg_match('/<PLUGIN\b([^>]*)>/s', $text, $t)) {
+            if (preg_match_all('/([A-Za-z_]+)\s*=\s*(?:"([^"]*)"|\'([^\']*)\')/', $t[1], $a, PREG_SET_ORDER)) {
+                foreach ($a as $x) $attrs[$x[1]] = $sub($x[2] !== '' || !isset($x[3]) ? $x[2] : $x[3]);
+            }
         }
     }
     $desc = '';
@@ -329,6 +354,9 @@ function pp_check_update(string $plg, array $P): array {
     if ($latest['version'] === '') { $r['error'] = 'The update URL did not return a plugin file'; return $r; }
     $r['latest'] = $latest['version'];
     $r['newer'] = pp_is_newer($latest['version'], $cached['version']);
+    // Keep the downloaded copy where Unraid's own update check keeps its copies, so the Plugins tab can show
+    // "update available" for a parked plugin without a second download.
+    pp_write_atomic("{$P['tmpplg']}/$plg", $body);
     return $r;
 }
 

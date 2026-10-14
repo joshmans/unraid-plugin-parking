@@ -145,6 +145,26 @@ check('update: no url', pp_check_update('nourl.plg', $P)['error'] !== null);
 @unlink("{$P['parked']}/nourl.plg");
 unset($GLOBALS['pp_fetch']);
 
+/* the update check leaves its download where Unraid's own check keeps them */
+$GLOBALS['pp_fetch'] = fn($u) => plg('rclone', '2026.09.30');
+pp_check_update('rclone.plg', $P);
+check('update: copy saved for the Plugins tab', is_file("{$P['tmpplg']}/rclone.plg") && pp_read_plg("{$P['tmpplg']}/rclone.plg")['version'] === '2026.09.30');
+$GLOBALS['pp_fetch'] = fn($u) => '<html>not a plugin</html>';
+pp_check_update('rclone.plg', $P);
+check('update: a junk response does not replace the saved copy', pp_read_plg("{$P['tmpplg']}/rclone.plg")['version'] === '2026.09.30');
+unset($GLOBALS['pp_fetch']);
+
+/* attributes are read as XML, like Unraid does */
+$a = pp_parse_plg("<?xml version='1.0'?>\n<!DOCTYPE PLUGIN [\n<!ENTITY base \"https://h.test\">\n<!ENTITY pluginURL \"&base;/a.plg?x=1&amp;y=2\">\n]>\n<PLUGIN name=\"n\" version='1' pluginURL=\"&pluginURL;\"></PLUGIN>");
+check('xml: nested entities and &amp; are decoded', $a['pluginURL'] === 'https://h.test/a.plg?x=1&y=2' && $a['version'] === '1', json_encode($a));
+$secret = sys_get_temp_dir() . '/pp-secret-' . bin2hex(random_bytes(4));
+file_put_contents($secret, 'TOPSECRET');
+$x = pp_parse_plg("<?xml version='1.0'?>\n<!DOCTYPE PLUGIN [\n<!ENTITY leak SYSTEM \"file://$secret\">\n]>\n<PLUGIN name=\"n\" version=\"&leak;\" Title=\"t\"></PLUGIN>");
+check('xml: an external entity is never read', strpos(json_encode($x), 'TOPSECRET') === false, json_encode($x));
+unlink($secret);
+$m = pp_parse_plg("<PLUGIN name=\"m\" version=\"7\" Title=\"broken\">\n<DESCRIPTION>no closing tag");
+check('xml: a file that is not well-formed falls back to the plain-text reader', $m['name'] === 'm' && $m['version'] === '7', json_encode($m));
+
 /* ---------- unpark ---------- */
 $r = pp_unpark('rclone.plg', $P);
 check('unpark ok', $r['ok'] === true && is_file("{$P['plugins']}/rclone.plg") && !is_file("{$P['parked']}/rclone.plg") && !is_file(pp_meta_file($P, 'rclone.plg')), json_encode($r));

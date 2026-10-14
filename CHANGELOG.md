@@ -1,5 +1,10 @@
 # Plugin Parking
 
+## 2026.10.13
+
+- **Plugin attributes are read as XML, the way Unraid reads them** (suggested by Squidly271). A plugin's name, version, author and update URL come from its `<PLUGIN>` tag with the DOCTYPE entities resolved, so nested entities and `&amp;` in an update URL now come out exactly as Unraid sees them. A file that declares an external (`SYSTEM`) entity is never read as XML, because a plugin file fetched for the update check must not be able to pull a local file into its values; a file that is not well-formed XML is still read as plain text, as before.
+- **The update check keeps its download in `/tmp/plugins`**, where Unraid's own check keeps its copies. A parked plugin that has an update now shows "update available" on the Plugins tab, without a second download.
+
 ## 2026.09.26e
 
 - **Parked packages no longer get undone by un-get.** `un-get upgrade` installs newer versions of everything on its list, which pulled a parked package back into `/boot/extra`, and `un-get cleanup` drops packages that are not installed from its list. While a package is parked, its entry is now taken out of un-get's list and remembered; **Load at every boot** puts it back. Packages that were already parked are handled the next time you open the Boot Packages tab, and a copy of un-get's list as it was is kept (`/boot/config/plugins/plugin-parking/unget-list.original`). un-get itself is not modified.
