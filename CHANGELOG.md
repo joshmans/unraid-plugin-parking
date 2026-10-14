@@ -1,5 +1,9 @@
 # Plugin Parking
 
+## 2026.10.13a
+
+- Fixed three PHP warnings (`Undefined array key "title"`, `"version"`, `"description"`) written to the system log each time the plugin list was built. Unraid lists `unRAIDServer.plg` as loaded although it has no file in the plugins folder, and reading it returned nothing. A missing or unreadable plugin file now gives an empty record, so the entry still appears, without the warnings.
+
 ## 2026.10.13
 
 - **Plugin attributes are read as XML, the way Unraid reads them** (suggested by Squidly271). A plugin's name, version, author and update URL come from its `<PLUGIN>` tag with the DOCTYPE entities resolved, so nested entities and `&amp;` in an update URL now come out exactly as Unraid sees them. A file that declares an external (`SYSTEM`) entity is never read as XML, because a plugin file fetched for the update check must not be able to pull a local file into its values; a file that is not well-formed XML is still read as plain text, as before.

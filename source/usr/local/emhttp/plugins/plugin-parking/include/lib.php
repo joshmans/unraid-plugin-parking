@@ -151,9 +151,10 @@ function pp_parse_plg(string $text): array {
     ];
 }
 
+/** Reads a .plg; one that is missing or unreadable (Unraid lists unRAIDServer.plg as loaded, with no file) gives the empty record, so callers never see missing keys. */
 function pp_read_plg(string $file): array {
     $t = @file_get_contents($file);
-    return $t === false ? [] : pp_parse_plg($t);
+    return pp_parse_plg($t === false ? '' : $t);
 }
 
 /** Unraid's own rule (plugin script): a version is newer when its string compares greater. */
