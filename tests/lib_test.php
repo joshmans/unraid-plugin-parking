@@ -164,6 +164,8 @@ check('xml: an external entity is never read', strpos(json_encode($x), 'TOPSECRE
 unlink($secret);
 $m = pp_parse_plg("<PLUGIN name=\"m\" version=\"7\" Title=\"broken\">\n<DESCRIPTION>no closing tag");
 check('xml: a file that is not well-formed falls back to the plain-text reader', $m['name'] === 'm' && $m['version'] === '7', json_encode($m));
+$none = pp_read_plg("{$P['plugins']}/does-not-exist.plg");
+check('read: a missing file gives the full empty record', $none['title'] === '' && $none['version'] === '' && $none['description'] === '' && $none['pluginURL'] === '' && $none['dirs'] === [], json_encode($none));
 
 /* ---------- unpark ---------- */
 $r = pp_unpark('rclone.plg', $P);
