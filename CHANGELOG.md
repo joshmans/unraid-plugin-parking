@@ -1,5 +1,9 @@
 # Plugin Parking
 
+## 2026.11.21
+
+- When loading a parked plugin fails, the error now says which plugin it was (`Could not load “<plugin>”`) instead of "Something went wrong". If the error carries no message, it says the request did not complete and to check the connection.
+
 ## 2026.10.13a
 
 - Fixed three PHP warnings (`Undefined array key "title"`, `"version"`, `"description"`) written to the system log each time the plugin list was built. Unraid lists `unRAIDServer.plg` as loaded although it has no file in the plugins folder, and reading it returned nothing. A missing or unreadable plugin file now gives an empty record, so the entry still appears, without the warnings.
