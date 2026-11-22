@@ -17,7 +17,7 @@ jobs:
   release:
     permissions:
       contents: write
-    uses: joshmans/unraid-tools/.github/workflows/plugin-release.yml@plugin-release-workflow
+    uses: joshmans/unraid-tools/.github/workflows/plugin-release.yml@main
     with:
       plg: plugin-parking.plg
       test-command: tests/run.sh
