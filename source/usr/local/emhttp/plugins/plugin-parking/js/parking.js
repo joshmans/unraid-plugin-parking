@@ -223,7 +223,7 @@
           buttons: [{ label: 'Close', value: 'close' }, { label: 'Reload page', value: 'reload', primary: true }] })
           .then((d) => { if (d && d.button === 'reload') location.reload(); else loadPlugins(); });
       });
-    }).catch((e) => { notify('Something went wrong', e.message); });
+    }).catch((e) => { notify('Could not load “' + p.title + '”', (e && e.message) || 'The request did not complete. Check your connection and try again.'); });
   }
 
   /* ---------- Park buttons on the built-in Installed Plugins list ---------- */
